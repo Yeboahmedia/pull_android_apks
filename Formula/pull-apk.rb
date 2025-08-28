@@ -4,10 +4,10 @@
 class PullApk < Formula
   desc "Pull and optionally decompile/view Android APKs from a connected device"
   homepage "https://github.com/Yeboahmedia/pull_android_apks"
-  url "https://github.com/Yeboahmedia/pull_android_apks/archive/refs/tags/v0.2.0.tar.gz"
+  url "https://github.com/Yeboahmedia/pull_android_apks/archive/refs/tags/v0.1.1.tar.gz"
   sha256 "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
   license "MIT"
-  version "0.2.0"
+  version "0.1.1"
 
   def install
     bin.install "bin/pull-apk"
