@@ -4,8 +4,8 @@
 class PullApk < Formula
   desc "Pull and optionally decompile/view Android APKs from a connected device"
   homepage "https://github.com/Yeboahmedia/pull_android_apks"
-  url "https://github.com/Yeboahmedia/pull_android_apks/archive/refs/tags/v0.3.0.tar.gz"
-  sha256 "a5872cdbe6e59f25a6d4621dcf5d38088efadce7e0f31c8e42ee14ce7369017e"
+  url "https://github.com/Yeboahmedia/pull_android_apks/archive/refs/tags/v0.3.3.tar.gz"
+  sha256 "448c048d63ae22cc4dd1de1f12aa47655e9ab85b2fac4424ec555ef93014d020"
   license "MIT"
   version "0.1.0"
 
