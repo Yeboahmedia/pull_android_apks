@@ -1,0 +1,17 @@
+# bash completion for pull-apk
+_pull_apk_complete() {
+  local cur prev words cword
+  _init_completion -n : || return
+
+  case "${prev}" in
+    -p|--package|-a|--app)
+      # Suggest package names from connected device (quietly no-op if none)
+      COMPREPLY=( $(compgen -W "$(pull-apk --_comp-list-packages 2>/dev/null)" -- "$cur") )
+      return
+      ;;
+  esac
+
+  local opts="--package -p --app -a --decompile -d --jadx -j --check-deps --version -v --help -h"
+  COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+}
+complete -F _pull_apk_complete pull-apk

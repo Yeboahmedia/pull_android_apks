@@ -9,32 +9,28 @@ class PullApk < Formula
   license "MIT"
   version "0.1.0"
 
-
-  # We deliberately do NOT declare dependencies on adb/apktool/jadx.
-  # Users can install them however they prefer.
-
   def install
     bin.install "bin/pull-apk"
+    bash_completion.install "completions/bash/pull-apk"
+    zsh_completion.install  "completions/zsh/_pull-apk"
+    fish_completion.install "completions/fish/pull-apk.fish"
   end
 
   def caveats
     <<~EOS
-      This tool requires:
+      Requires:
         - adb (Android platform tools)
         - apktool (only if you use --decompile)
         - jadx-gui (only if you use --jadx)
 
-      The formula does not install these. Install them by any means you prefer.
-      You can verify presence without running an operation:
+      Verify presence:
         pull-apk --check-deps
     EOS
   end
 
   test do
-    # Ensure the CLI is present and shows usage / help without a device.
     output = shell_output("#{bin}/pull-apk 2>&1", 1)
     assert_match "Usage: pull_apk", output
-    # Version prints without error
     assert_match "pull_apk 0.1.0", shell_output("#{bin}/pull-apk --version")
   end
 end

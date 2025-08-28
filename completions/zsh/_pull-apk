@@ -1,0 +1,17 @@
+#compdef pull-apk for zsh
+
+_arguments -s \
+  '(-p --package)'{-p,--package}'[Package name]:package name:_pull_apk_packages' \
+  '(-a --app)'{-a,--app}'[Search term]:search term:_pull_apk_packages' \
+  '(-d --decompile)'{-d,--decompile}'[Decompile with apktool]' \
+  '(-j --jadx)'{-j,--jadx}'[Open with jadx-gui]' \
+  '--check-deps[Show dependency status]' \
+  '(-v --version)'{-v,--version}'[Print version]' \
+  '(-h --help)'{-h,--help}'[Show help]' \
+  '*:arg:->args'
+
+function _pull_apk_packages() {
+  local -a pkgs
+  pkgs=("${(@f)$(pull-apk --_comp-list-packages 2>/dev/null)}")
+  _describe 'packages' pkgs
+}
