@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PULL_APK_VERSION="0.1.0"
+
+pull_apk() {
+    # --- Shell-aware indexing helper (zsh arrays are 1-based, bash are 0-based) ---
+    local i0=0
+    if [ -n "${ZSH_VERSION:-}" ]; then i0=1; fi
+
+    # Zsh/Bash compatible locals
+    local package_name=""
+    local search_term=""
+    local decompile_flag=false
+    local jadx_flag=false
+    local check_deps=false
+    local -a adb_command=("adb")  # array in both bash/zsh
+
+    # --- Tiny helpers ---
+    _has() { command -v "$1" >/dev/null 2>&1; }
+    _die() { echo "$@" >&2; return 1; }
+
+    # --- Argument Parsing ---
+    if [[ $# -eq 0 ]]; then
+        cat <<'USAGE'
+Usage: pull_apk [options] [-p <package_name> | -a <app_name_to_search>]
+
+Options:
+  -p, --package <name>    Specify the exact package name.
+  -a, --app <name>        Search for packages by (partial) app name.
+  -d, --decompile         Decompile the pulled APK using apktool.
+  -j, --jadx              Open the pulled APK with jadx-gui.
+      --check-deps        Print dependency status (adb, apktool, jadx-gui) and exit.
+  -v, --version           Print version and exit.
+  -h, --help              Show this help and exit.
+
+Examples:
+  pull_apk -a smileidentity
+  pull_apk -p com.example.app -d
+USAGE
+        return 1
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -d|--decompile) decompile_flag=true; shift ;;
+            -j|--jadx)      jadx_flag=true; shift ;;
+            -a|--app)       search_term="${2:-}"; shift 2 ;;
+            -p|--package)   package_name="${2:-}"; shift 2 ;;
+            --check-deps)   check_deps=true; shift ;;
+            -v|--version)   echo "pull_apk ${PULL_APK_VERSION}"; return 0 ;;
+            -h|--help)      "$0"; return 1 ;; # fall back to usage above
+            *) _die "Unknown option: $1" ;;
+        esac
+    done
+
+    # --- Dependency Checks (never installs—just checks) ---
+    local have_adb="missing" have_apktool="missing" have_jadx="missing"
+    _has adb && have_adb="ok"
+    _has apktool && have_apktool="ok"
+    _has jadx-gui && have_jadx="ok"
+
+    if $check_deps; then
+        echo "Dependency check:"
+        printf "  %-10s %s\n" "adb:"       "$have_adb"
+        printf "  %-10s %s\n" "apktool:"   "$have_apktool"
+        printf "  %-10s %s\n" "jadx-gui:"  "$have_jadx"
+        # Don’t require apktool/jadx unless flags are used
+        if [[ "$have_adb" != "ok" ]]; then return 1; fi
+        return 0
+    fi
+
+    if [[ "$have_adb" != "ok" ]]; then
+        _die "Error: adb is not installed or not in your PATH."
+    fi
+    if $decompile_flag && [[ "$have_apktool" != "ok" ]]; then
+        echo "Warning: 'apktool' not found. Decompile step will be skipped." >&2
+        decompile_flag=false
+    fi
+    if $jadx_flag && [[ "$have_jadx" != "ok" ]]; then
+        echo "Warning: 'jadx-gui' not found. Jadx step will be skipped." >&2
+        jadx_flag=false
+    fi
+
+    # --- Device Selection (Bash & Zsh friendly) ---
+    # Keep newlines; strip only CRs
+    local devices
+    devices=$(adb devices | awk 'NR > 1 && $2 == "device" {print $1}' | tr -d '\r')
+
+    # Split into array (portable): enable sh_word_split in zsh; harmless in bash
+    setopt sh_word_split 2>/dev/null || true
+    local -a device_array=( $devices )
+    unsetopt sh_word_split 2>/dev/null || true
+
+    local device_count=${#device_array[@]}
+    if [[ $device_count -eq 0 ]]; then
+        echo "Error: No devices/emulators found connected."
+        echo "Debug: 'adb devices' raw output:"
+        adb devices
+        return 1
+    elif [[ $device_count -gt 1 ]]; then
+        echo "Multiple devices found. Please select one:"
+        select device in "${device_array[@]}" "Cancel"; do
+            if [[ "$device" == "Cancel" ]]; then
+                echo "Operation cancelled."; return 1
+            elif [[ -n "$device" ]]; then
+                adb_command=("adb" "-s" "$device")
+                echo "Using device: $device"
+                break
+            else
+                echo "Invalid selection. Please try again."
+            fi
+        done
+    else
+        local device_serial="${device_array[$i0]}"
+        adb_command=("adb" "-s" "$device_serial")
+        echo "Using single available device: $device_serial"
+    fi
+
+    # --- Package Name Resolution ---
+    if [[ -n "$search_term" ]]; then
+        echo "Searching for packages matching '$search_term'..."
+        local packages_raw
+        packages_raw=$("${adb_command[@]}" shell pm list packages | grep -i "$search_term" | sed 's/^package://' | tr -d '\r')
+
+        setopt sh_word_split 2>/dev/null || true
+        local -a packages_found=( $packages_raw )
+        unsetopt sh_word_split 2>/dev/null || true
+
+        local num_packages=${#packages_found[@]}
+        if [[ $num_packages -eq 0 ]]; then
+            echo "No packages found matching '$search_term'."
+            return 1
+        elif [[ $num_packages -eq 1 ]]; then
+            package_name="${packages_found[$i0]}"
+            echo "Found unique package, auto-selecting: $package_name"
+        else
+            echo "Found multiple packages. Please select one:"
+            select selected_package in "${packages_found[@]}" "Cancel"; do
+                if [[ "$selected_package" == "Cancel" ]]; then
+                    echo "Operation cancelled."; return 1
+                elif [[ -n "$selected_package" ]]; then
+                    package_name="$selected_package"
+                    break
+                else
+                    echo "Invalid selection. Please try again."
+                fi
+            done
+        fi
+    fi
+
+    if [[ -z "$package_name" ]]; then
+        _die "Error: No package specified or selected."
+    fi
+    echo "Selected package: $package_name"
+
+    # --- APK Pulling and Processing ---
+    local apk_path
+    apk_path=$("${adb_command[@]}" shell pm path "$package_name" | sed 's/^package://' | tr -d '\r')
+    if [[ -z "$apk_path" ]]; then
+        _die "Error: Could not find APK path for package '$package_name'. Is it installed?"
+    fi
+    echo "APK path on device: $apk_path"
+
+    local local_apk_name="${package_name}.apk"
+    echo "Pulling APK to ./${local_apk_name}..."
+    if "${adb_command[@]}" pull "$apk_path" "./$local_apk_name"; then
+        echo "Successfully pulled to $(pwd)/$local_apk_name"
+
+        if $decompile_flag; then
+            echo "Decompiling ${local_apk_name} with apktool..."
+            apktool d -f "$local_apk_name"
+        fi
+
+        if $jadx_flag; then
+            echo "Opening ${local_apk_name} with jadx-gui..."
+            nohup jadx-gui "$local_apk_name" >/dev/null 2>&1 &
+        fi
+    else
+        _die "Error: Failed to pull APK for '$package_name'."
+    fi
+}
+
+pull_apk "$@"
