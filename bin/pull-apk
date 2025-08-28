@@ -170,7 +170,7 @@ USAGE
             nohup jadx-gui "$local_apk_name" >/dev/null 2>&1 &
         fi
     else
-        _die "Error: Failed to pull APK for '$package_name'."
+        _die "Error: Failed to pull APK file for '$package_name'."
     fi
 }
 
